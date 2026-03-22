@@ -8,6 +8,8 @@ version = "0.1.0"
 description = "FastAPI wrapper for extracting reports from spending.gov.ua"
 readme = "README.md"
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["fastapi", "playwright", "spending.gov.ua", "edrpou", "budget-reports", "ukraine"]
 classifiers = [
   "Development Status :: 4 - Beta",

@@ -143,6 +143,12 @@ To assemble the package artifacts, GitHub description draft, Dockerfile, and the
 
 The resulting bundle is written to `release/`.
 
+## License
+
+This project is distributed under the MIT License. See [LICENSE](LICENSE).
+
+Important: the MIT license applies to the source code in this repository. It does not automatically change the legal status of data or content obtained from `spending.gov.ua`, which may be subject to separate terms or source licensing.
+
 ## Project Layout
 
 - `spendinggovua_api/main.py` - FastAPI app and HTTP routes
