@@ -1,5 +1,10 @@
 # spendinggovua_api
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-app-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Playwright](https://img.shields.io/badge/Playwright-Chromium-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/python/)
+
 Browser-backed FastAPI service and web UI for extracting reports from `spending.gov.ua` by EDRPOU, date range, and report form.
 
 The project uses `Playwright + Chromium` instead of direct `requests/curl`, because the portal often blocks or breaks plain HTTP clients and headless scraping.
