@@ -2,6 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](https://www.python.org/downloads/)
+[![GitHub Release](https://img.shields.io/github/v/release/VKK-00/spendinggovua_api?display_name=tag)](https://github.com/VKK-00/spendinggovua_api/releases/latest)
+[![GitHub Downloads](https://img.shields.io/github/downloads/VKK-00/spendinggovua_api/total)](https://github.com/VKK-00/spendinggovua_api/releases)
 [![FastAPI](https://img.shields.io/badge/FastAPI-app-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Playwright](https://img.shields.io/badge/Playwright-Chromium-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/python/)
 
