@@ -133,6 +133,16 @@ To build one archive with all available `Form 2` reports for the predefined EDRP
 
 The script writes the resulting ZIP archive to `output/`.
 
+## Delivery Bundle
+
+To assemble the package artifacts, GitHub description draft, Dockerfile, and the batch `Form 2` archive into one distributable ZIP:
+
+```powershell
+.venv\Scripts\python scripts\build_delivery_bundle.py
+```
+
+The resulting bundle is written to `release/`.
+
 ## Project Layout
 
 - `spendinggovua_api/main.py` - FastAPI app and HTTP routes

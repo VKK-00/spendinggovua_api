@@ -10,3 +10,4 @@ output/
 build/
 dist/*.whl
 dist/*.tar.gz
+release/
