@@ -13,6 +13,7 @@ from typing import Any
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 
 from app.models import SearchReportsRequest
+from app.report_render import build_report_html
 from app.settings import Settings
 
 
@@ -120,6 +121,7 @@ class SpendingGovClient:
         self._catalog_cache = TTLCache(settings.cache_ttl_seconds)
         self._reports_cache = TTLCache(settings.cache_ttl_seconds)
         self._details_cache = TTLCache(settings.cache_ttl_seconds)
+        self._report_view_cache = TTLCache(settings.cache_ttl_seconds)
 
     @property
     def started(self) -> bool:
@@ -147,6 +149,87 @@ class SpendingGovClient:
             return self._catalog_with_report_counts(catalog, reports or [])
         catalog, reports = await self._load_catalog_and_reports(normalized, sign_status)
         return self._catalog_with_report_counts(catalog, reports)
+
+    async def get_report_view_data(self, edrpou: str, report_id: int) -> dict[str, Any]:
+        normalized = normalize_edrpou(edrpou)
+        cached = self._report_view_cache.get((normalized, int(report_id)))
+        if cached is not None:
+            return cached
+
+        page = await self._new_page()
+        try:
+            await page.goto(
+                self._settings.report_details_page(normalized, int(report_id)),
+                wait_until="domcontentloaded",
+            )
+            await page.wait_for_timeout(2_000)
+            payload = await page.evaluate(
+                """
+                () => {
+                  const table =
+                    document.querySelectorAll("table.report-table-width")[1] ||
+                    document.querySelector("table.report-table-width");
+                  const text = (node) => (node?.textContent || "").replace(/\\s+/g, " ").trim();
+                  const signedBlock = text(document.querySelector(".report-item-signature"));
+                  const notationText = text(document.querySelector(".report_table_notation"));
+                  return {
+                    source_url: window.location.href,
+                    signed_at: signedBlock.replace(/^Підписано\\s*/i, "").replace(/перевірити підпис.*/i, "").trim(),
+                    title: text(document.querySelector(".report__view__head")),
+                    name: text(document.querySelector(".report__view__name")),
+                    period: text(document.querySelector(".report__view__period")),
+                    codes: Array.from(document.querySelectorAll(".report__view__code")).map(text).filter(Boolean),
+                    fields: Array.from(document.querySelectorAll(".report__view__field")).map((field) => ({
+                      name: text(field.querySelector(".report__view__field__name")),
+                      value: text(field.querySelector(".report__view__field__underline")),
+                    })),
+                    notation: notationText
+                      ? notationText.split(/(?<=\\.)\\s+/).map((item) => item.trim()).filter(Boolean)
+                      : [],
+                    table: table
+                      ? {
+                          header_rows: Array.from(table.querySelectorAll("thead tr")).map((row) =>
+                            Array.from(row.querySelectorAll("th,td")).map(text)
+                          ),
+                          body_rows: Array.from(table.querySelectorAll("tbody tr")).map((row) =>
+                            Array.from(row.querySelectorAll("th,td")).map(text)
+                          ),
+                        }
+                      : { header_rows: [], body_rows: [] },
+                  };
+                }
+                """
+            )
+        finally:
+            await page.close()
+
+        if not payload["table"]["body_rows"]:
+            raise SpendingGovError(
+                f"Не вдалося витягнути табличне представлення звіту для ЄДРПОУ {normalized}, reportId={report_id}."
+            )
+
+        self._report_view_cache.set((normalized, int(report_id)), payload)
+        return payload
+
+    async def render_report_html(self, edrpou: str, report_id: int) -> str:
+        report = await self.get_report_view_data(edrpou, report_id)
+        return build_report_html(report)
+
+    async def render_report_pdf(self, edrpou: str, report_id: int) -> bytes:
+        html = await self.render_report_html(edrpou, report_id)
+        context = await self._ensure_browser()
+        page = await context.new_page()
+        try:
+            await page.set_content(html, wait_until="load")
+            pdf_bytes = await page.pdf(
+                format="A4",
+                landscape=True,
+                print_background=True,
+                prefer_css_page_size=True,
+            )
+        finally:
+            await page.close()
+        return pdf_bytes
 
     async def search_reports(self, request: SearchReportsRequest) -> dict[str, Any]:
         result, _all_items, _errors = await self._collect_reports(

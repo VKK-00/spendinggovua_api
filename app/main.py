@@ -6,6 +6,7 @@ from pathlib import Path as FilePath
 
 from fastapi import FastAPI, HTTPException, Path, Request
 from fastapi.responses import FileResponse
+from fastapi.responses import HTMLResponse
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 
@@ -19,6 +20,7 @@ from app.models import (
     SearchReportsResponse,
 )
 from app.settings import Settings
+from app.report_render import build_report_filename
 from app.spending_client import SpendingGovClient, SpendingGovError, normalize_edrpou
 from app.zip_export import build_reports_zip
 
@@ -120,6 +122,49 @@ async def report_types_summary(
     except SpendingGovError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return ReportTypesSummaryResponse.model_validate(result)
+
+
+@app.get(
+    "/api/reports/{edrpou}/{report_id}/html",
+    responses={502: {"model": ErrorResponse}},
+    tags=["reports"],
+)
+async def report_html(
+    request: Request,
+    edrpou: str = Path(..., description="ЄДРПОУ організації."),
+    report_id: int = Path(..., description="Ідентифікатор звіту на spending.gov.ua."),
+) -> HTMLResponse:
+    spending_client = get_client(request)
+    try:
+        html = await spending_client.render_report_html(normalize_edrpou(edrpou), int(report_id))
+    except SpendingGovError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return HTMLResponse(content=html)
+
+
+@app.get(
+    "/api/reports/{edrpou}/{report_id}/pdf",
+    responses={502: {"model": ErrorResponse}},
+    tags=["reports"],
+)
+async def report_pdf(
+    request: Request,
+    edrpou: str = Path(..., description="ЄДРПОУ організації."),
+    report_id: int = Path(..., description="Ідентифікатор звіту на spending.gov.ua."),
+) -> Response:
+    spending_client = get_client(request)
+    normalized = normalize_edrpou(edrpou)
+    try:
+        pdf_bytes = await spending_client.render_report_pdf(normalized, int(report_id))
+    except SpendingGovError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    filename = build_report_filename(normalized, int(report_id), "pdf")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
 
 
 @app.post(

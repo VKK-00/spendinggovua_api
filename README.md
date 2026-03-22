@@ -8,6 +8,9 @@
 - `GET /health`
 - `GET /api/catalog/{edrpou}`
 - `POST /api/reports/search`
+- `POST /api/report-types/summary`
+- `GET /api/reports/{edrpou}/{report_id}/html`
+- `GET /api/reports/{edrpou}/{report_id}/pdf`
 - `POST /api/reports/export/zip`
 - browser-backed доступ до `spending.gov.ua` через `Playwright`
 - Docker-конфіг для деплою на сервер

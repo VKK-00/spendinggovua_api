@@ -31,6 +31,9 @@ class Settings:
     def report_details_api(self, edrpou: str, report_id: int) -> str:
         return f"{self.base_url}/portal-api/v2/api/reports/{edrpou}/{report_id}"
 
+    def report_details_page(self, edrpou: str, report_id: int) -> str:
+        return f"{self.base_url}/new/disposers/{edrpou}/reports/{report_id}"
+
     @property
     def periods_api(self) -> str:
         return f"{self.base_url}/portal-api/v2/api/reports/periods/"

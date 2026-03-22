@@ -176,6 +176,8 @@ function renderResults(payload) {
       <td>
         <div class="row-actions">
           <a class="row-link" href="https://spending.gov.ua/new/en/disposers/${encodeURIComponent(item.edrpou)}/reports" target="_blank" rel="noreferrer">Портал</a>
+          <a class="row-link" href="/api/reports/${encodeURIComponent(item.edrpou)}/${encodeURIComponent(item.reportId)}/html" target="_blank" rel="noreferrer">HTML</a>
+          <a class="row-link" href="/api/reports/${encodeURIComponent(item.edrpou)}/${encodeURIComponent(item.reportId)}/pdf" target="_blank" rel="noreferrer">PDF</a>
           ${item.details ? '<button type="button" class="ghost-button details-button">JSON</button>' : ""}
         </div>
       </td>
