@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 import json
 import re
 import time
@@ -69,6 +70,46 @@ def extract_year(period: dict[str, Any] | None) -> int | None:
     return None
 
 
+def extract_period_bounds(period: dict[str, Any] | None) -> tuple[date | None, date | None]:
+    if not period:
+        return None, None
+
+    start = period.get("from")
+    end = period.get("to")
+
+    try:
+        start_date = date.fromisoformat(start) if isinstance(start, str) else None
+    except ValueError:
+        start_date = None
+
+    try:
+        end_date = date.fromisoformat(end) if isinstance(end, str) else None
+    except ValueError:
+        end_date = None
+
+    return start_date, end_date
+
+
+def extract_form_codes(value: str | None, *, require_form_word: bool = False) -> set[str]:
+    text = normalize_text(value)
+    if not text:
+        return set()
+    if require_form_word and "форма" not in text and "form" not in text:
+        return set()
+
+    normalized = text.replace("д", "d").replace("м", "m").replace("№", " ")
+    return {
+        match.group(1)
+        for match in re.finditer(r"(?<![\d.-])(\d+(?:[.-]\d+)?(?:[dm])?)(?![\d])", normalized)
+    }
+
+
+def form_codes_match(expected: str, actual: str) -> bool:
+    if expected == actual:
+        return True
+    return re.sub(r"[dm]$", "", expected) == re.sub(r"[dm]$", "", actual)
+
+
 class SpendingGovClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -108,15 +149,99 @@ class SpendingGovClient:
         return self._catalog_with_report_counts(catalog, reports)
 
     async def search_reports(self, request: SearchReportsRequest) -> dict[str, Any]:
+        result, _all_items, _errors = await self._collect_reports(
+            request,
+            ignore_errors=False,
+        )
+        return result
+
+    async def search_reports_partial(self, request: SearchReportsRequest) -> dict[str, Any]:
+        result, _items, errors = await self._collect_reports(
+            request,
+            ignore_errors=True,
+        )
+        result["errors"] = errors
+        return result
+
+    async def summarize_report_types(self, request: SearchReportsRequest) -> dict[str, Any]:
+        base_request = request.model_copy(
+            update={
+                "report_type_ids": [],
+                "report_types": [],
+                "include_details": False,
+                "max_reports": None,
+            }
+        )
+        result = await self.search_reports_partial(base_request)
+
+        counts_by_type: Counter[str] = Counter()
+        edrpous_by_type: dict[str, set[str]] = defaultdict(set)
+        years_by_type: dict[str, Counter[int]] = defaultdict(Counter)
+
+        for item in result["items"]:
+            type_name = (
+                item.get("reportTypeShortName")
+                or item.get("reportName")
+                or "Невідомий тип"
+            )
+            edrpou = str(item.get("edrpou") or "")
+            year = item.get("year")
+
+            counts_by_type[type_name] += 1
+            if edrpou:
+                edrpous_by_type[type_name].add(edrpou)
+            if isinstance(year, int):
+                years_by_type[type_name][year] += 1
+
+        result["types"] = [
+            {
+                "name": type_name,
+                "reports_count": counts_by_type[type_name],
+                "edrpous_count": len(edrpous_by_type[type_name]),
+                "edrpous": sorted(edrpous_by_type[type_name]),
+                "by_year": dict(
+                    sorted(
+                        (
+                            (str(year), count)
+                            for year, count in years_by_type[type_name].items()
+                        ),
+                        reverse=True,
+                    )
+                ),
+            }
+            for type_name, _count in sorted(
+                counts_by_type.items(),
+                key=lambda item: (-item[1], item[0]),
+            )
+        ]
+        return result
+
+    async def _collect_reports(
+        self,
+        request: SearchReportsRequest,
+        *,
+        ignore_errors: bool,
+    ) -> tuple[dict[str, Any], list[dict[str, Any]], list[dict[str, str]]]:
         edrpous = self._collect_edrpous(request)
         all_items: list[dict[str, Any]] = []
+        errors: list[dict[str, str]] = []
 
         for edrpou in edrpous:
-            catalog, reports = await self._load_catalog_and_reports(edrpou, request.sign_status)
+            try:
+                catalog, reports = await self._load_catalog_and_reports(edrpou, request.sign_status)
+            except SpendingGovError as exc:
+                detail = await self._enhance_collect_error(edrpou, exc)
+                if not ignore_errors:
+                    raise SpendingGovError(detail) from exc
+                errors.append({"edrpou": edrpou, "detail": detail})
+                continue
+
             filtered = self._filter_reports(
                 reports=reports,
                 catalog=catalog,
                 years=set(request.years),
+                date_from=request.date_from,
+                date_to=request.date_to,
                 report_type_ids=set(request.report_type_ids),
                 report_types={normalize_text(item) for item in request.report_types if item},
             )
@@ -141,6 +266,8 @@ class SpendingGovClient:
             "query": {
                 "edrpous": edrpous,
                 "years": request.years,
+                "date_from": request.date_from.isoformat() if request.date_from else None,
+                "date_to": request.date_to.isoformat() if request.date_to else None,
                 "report_type_ids": request.report_type_ids,
                 "report_types": request.report_types,
                 "sign_status": request.sign_status,
@@ -149,7 +276,7 @@ class SpendingGovClient:
             },
             "summary": self._build_summary(all_items),
             "items": all_items,
-        }
+        }, all_items, errors
 
     async def _ensure_browser(self) -> BrowserContext:
         async with self._browser_lock:
@@ -357,6 +484,8 @@ class SpendingGovClient:
         reports: list[dict[str, Any]],
         catalog: dict[str, Any],
         years: set[int],
+        date_from: date | None,
+        date_to: date | None,
         report_type_ids: set[int],
         report_types: set[str],
     ) -> list[dict[str, Any]]:
@@ -364,12 +493,17 @@ class SpendingGovClient:
         for raw_report in reports:
             period = catalog["periods"].get(int(raw_report["periodId"]))
             year = extract_year(period)
+            period_start, period_end = extract_period_bounds(period)
             report_type_id = int(raw_report["reportTypeId"])
             report_type_short_name = catalog["report_type_map"].get(
                 str(report_type_id),
                 raw_report.get("reportName") or "Невідомий тип",
             )
             if years and (year is None or year not in years):
+                continue
+            if date_from and period_end and period_end < date_from:
+                continue
+            if date_to and period_start and period_start > date_to:
                 continue
             if report_type_ids and report_type_id not in report_type_ids:
                 continue
@@ -395,12 +529,67 @@ class SpendingGovClient:
     ) -> bool:
         full_name = normalize_text(raw_report.get("reportName"))
         short = normalize_text(short_name)
+        actual_codes = extract_form_codes(short_name) | extract_form_codes(
+            raw_report.get("reportName"),
+            require_form_word=True,
+        )
         for expected in filters:
+            expected_codes = extract_form_codes(expected)
             if expected == full_name or expected == short:
                 return True
-            if expected and (expected in full_name or expected in short):
+            if expected_codes and actual_codes:
+                for expected_code in expected_codes:
+                    for actual_code in actual_codes:
+                        if form_codes_match(expected_code, actual_code):
+                            return True
+                continue
+            if expected and len(expected) >= 3 and (expected in full_name or expected in short):
                 return True
         return False
+
+    async def _enhance_collect_error(self, edrpou: str, exc: SpendingGovError) -> str:
+        message = str(exc)
+        if "HTTP 500" not in message:
+            return message
+        details = await self._inspect_reports_page(edrpou)
+        final_section = details["final_section"]
+        final_url = details["final_url"]
+
+        if final_section != "reports":
+            return (
+                f"Портал не відкрив розділ звітів для ЄДРПОУ {edrpou}: "
+                f"після переходу до reports перенаправляє на {final_section or final_url}. "
+                f"Початковий запит завершився HTTP 500."
+            )
+        if details["has_oops"]:
+            return (
+                f"Портал відкриває сторінку звітів для ЄДРПОУ {edrpou} з помилкою Oooooooops!. "
+                f"Початковий запит завершився HTTP 500."
+            )
+        return message
+
+    async def _inspect_reports_page(self, edrpou: str) -> dict[str, Any]:
+        page = await self._new_page()
+        try:
+            await page.goto(
+                self._settings.disposer_reports_page(edrpou),
+                wait_until="domcontentloaded",
+            )
+            await page.wait_for_timeout(2_000)
+            final_url = page.url
+            body_text = normalize_text(await page.locator("body").inner_text())
+        finally:
+            await page.close()
+
+        path = final_url.removeprefix(self._settings.base_url)
+        parts = [part for part in path.split("/") if part]
+        final_section = parts[-1] if parts else ""
+
+        return {
+            "final_url": final_url,
+            "final_section": final_section,
+            "has_oops": "oooooooops" in body_text or "помилка" in body_text,
+        }
 
     async def _attach_details(self, items: list[dict[str, Any]]) -> None:
         grouped: dict[str, list[int]] = defaultdict(list)

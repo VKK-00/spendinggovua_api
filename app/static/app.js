@@ -7,10 +7,14 @@ const state = {
 const form = document.getElementById("search-form");
 const edrpousField = document.getElementById("edrpous");
 const yearsField = document.getElementById("years");
+const dateFromField = document.getElementById("date-from");
+const dateToField = document.getElementById("date-to");
 const reportTypesField = document.getElementById("report-types");
 const includeDetailsField = document.getElementById("include-details");
+const latestOnlyField = document.getElementById("latest-only");
 const maxReportsField = document.getElementById("max-reports");
 const loadCatalogButton = document.getElementById("load-catalog");
+const downloadZipButton = document.getElementById("download-zip");
 const resetButton = document.getElementById("reset-form");
 const catalogStatus = document.getElementById("catalog-status");
 const yearChips = document.getElementById("year-chips");
@@ -234,6 +238,13 @@ async function searchReports(event) {
     include_details: includeDetailsField.checked,
   };
 
+  if (dateFromField.value) {
+    payload.date_from = dateFromField.value;
+  }
+  if (dateToField.value) {
+    payload.date_to = dateToField.value;
+  }
+
   const maxReports = Number(maxReportsField.value);
   if (Number.isFinite(maxReports) && maxReports > 0) {
     payload.max_reports = maxReports;
@@ -269,6 +280,84 @@ async function searchReports(event) {
   }
 }
 
+async function downloadZip() {
+  clearFlash();
+
+  const edrpous = parseList(edrpousField.value);
+  if (!edrpous.length) {
+    setFlash("Вкажіть хоча б один ЄДРПОУ для експорту.", "error");
+    return;
+  }
+
+  const payload = {
+    edrpous,
+    years: parseList(yearsField.value).map((value) => Number(value)).filter((value) => Number.isFinite(value)),
+    report_types: parseList(reportTypesField.value),
+    include_details: true,
+    latest_only_per_edrpou: latestOnlyField.checked,
+  };
+
+  if (dateFromField.value) {
+    payload.date_from = dateFromField.value;
+  }
+  if (dateToField.value) {
+    payload.date_to = dateToField.value;
+  }
+
+  const maxReports = Number(maxReportsField.value);
+  if (Number.isFinite(maxReports) && maxReports > 0) {
+    payload.max_reports = maxReports;
+  }
+
+  if (!payload.report_types.length) {
+    payload.report_types = ["Форма № 2"];
+    reportTypesField.value = payload.report_types.join(", ");
+  }
+
+  downloadZipButton.disabled = true;
+  downloadZipButton.textContent = "Готуємо ZIP...";
+
+  try {
+    const response = await fetch("/api/reports/export/zip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      let message = "Не вдалося згенерувати ZIP.";
+      try {
+        const errorPayload = await response.json();
+        message = errorPayload.detail || message;
+      } catch (_error) {
+        // ignore parse error and keep fallback message
+      }
+      throw new Error(message);
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const match = disposition.match(/filename="([^"]+)"/i);
+    const fileName = match?.[1] || "reports-export.zip";
+
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+
+    setFlash("ZIP-архів згенеровано і завантажено.", "info");
+  } catch (error) {
+    setFlash(error.message, "error");
+  } finally {
+    downloadZipButton.disabled = false;
+    downloadZipButton.textContent = "Скачати ZIP";
+  }
+}
+
 function resetForm() {
   form.reset();
   state.catalog = null;
@@ -298,5 +387,6 @@ function escapeHtml(value) {
 
 closeDialogButton.addEventListener("click", () => dialog.close());
 loadCatalogButton.addEventListener("click", loadCatalog);
+downloadZipButton.addEventListener("click", downloadZip);
 resetButton.addEventListener("click", resetForm);
 form.addEventListener("submit", searchReports);

@@ -70,6 +70,19 @@
             </label>
             <div id="year-chips" class="chips"></div>
 
+            <div class="grid-two">
+              <label class="field">
+                <span class="field-label">Дата від</span>
+                <input type="date" id="date-from" name="date-from" />
+                <span class="field-hint">Необов'язково. Наприклад, 2024-01-01.</span>
+              </label>
+              <label class="field">
+                <span class="field-label">Дата до</span>
+                <input type="date" id="date-to" name="date-to" />
+                <span class="field-hint">Необов'язково. Наприклад, 2025-12-31.</span>
+              </label>
+            </div>
+
             <label class="field">
               <span class="field-label">Типи звітів</span>
               <input
@@ -93,8 +106,14 @@
               </label>
             </div>
 
+            <label class="toggle-field">
+              <input type="checkbox" id="latest-only" />
+              <span>Для ZIP брати лише найсвіжіший звіт по кожному ЄДРПОУ</span>
+            </label>
+
             <div class="action-row">
               <button type="submit" class="primary-button">Знайти звіти</button>
+              <button type="button" id="download-zip" class="secondary-button">Скачати ZIP</button>
               <button type="button" id="reset-form" class="ghost-button">Скинути</button>
             </div>
           </form>
