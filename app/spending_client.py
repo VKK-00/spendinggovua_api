@@ -162,7 +162,7 @@ class SpendingGovClient:
                 self._settings.report_details_page(normalized, int(report_id)),
                 wait_until="domcontentloaded",
             )
-            await page.wait_for_timeout(2_000)
+            await page.locator("table.report-table-width").last.wait_for()
             payload = await page.evaluate(
                 """
                 () => {

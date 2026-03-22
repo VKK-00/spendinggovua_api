@@ -1,10 +1,22 @@
 # spendinggovua_api
 
-Веб-додаток і API для витягування звітів з `spending.gov.ua` по одному ЄДРПОУ або групі ЄДРПОУ, з фільтрацією по роках і типах звітів.
+Веб-додаток і API для витягування звітів з `spending.gov.ua` по одному ЄДРПОУ або групі ЄДРПОУ.
 
-## Що вже є
+Сервіс працює через `Playwright + Chromium`, тому не залежить від прямих `requests/curl`, які портал часто блокує або повертає з помилками.
 
-- `GET /` з веб-інтерфейсом для користувача
+## Що вміє
+
+- пошук звітів по одному або багатьох ЄДРПОУ
+- фільтрація по роках, діапазону дат і типах форм
+- зведення доступних типів звітів по групі ЄДРПОУ
+- витягування сирого JSON звіту
+- HTML-подання конкретного звіту з табличкою як на порталі
+- PDF конкретного звіту
+- ZIP-архіви по групі ЄДРПОУ
+
+## API
+
+- `GET /`
 - `GET /health`
 - `GET /api/catalog/{edrpou}`
 - `POST /api/reports/search`
@@ -12,24 +24,21 @@
 - `GET /api/reports/{edrpou}/{report_id}/html`
 - `GET /api/reports/{edrpou}/{report_id}/pdf`
 - `POST /api/reports/export/zip`
-- browser-backed доступ до `spending.gov.ua` через `Playwright`
-- Docker-конфіг для деплою на сервер
 
 ## Важливе обмеження
 
-`GitHub` підходить для зберігання коду, але не для запуску цього сервісу як додатка.
+Це не статичний сайт. `GitHub Pages` для нього не підходить.
 
-Причина проста:
+Причина:
 
-- `GitHub Pages` вміє тільки статичні сайти
-- тут потрібен бекенд `FastAPI`
-- бекенд запускає `Playwright + Chromium`
-- `spending.gov.ua` блокує прямі `requests/curl`, а також headless Chromium
+- потрібен живий `FastAPI` бекенд
+- потрібен браузерний `Playwright`
+- `spending.gov.ua` часто блокує headless або прямі HTTP-запити
 
-Тому правильна схема така:
+Нормальна схема:
 
 1. код зберігається на GitHub
-2. сам додаток деплоїться на VPS або будь-який Docker-сумісний хостинг
+2. застосунок запускається на VPS, Render, Railway, Fly.io або іншому сервері з Docker / Python
 
 ## Локальний запуск
 
@@ -44,81 +53,91 @@ uvicorn app.main:app --reload
 Після запуску:
 
 - UI: `http://127.0.0.1:8000/`
-- Swagger UI: `http://127.0.0.1:8000/docs`
+- Swagger: `http://127.0.0.1:8000/docs`
 - OpenAPI JSON: `http://127.0.0.1:8000/openapi.json`
 
-## Веб-інтерфейс
+## Приклади
 
-Головна сторінка дає:
-
-- поле для одного або кількох ЄДРПОУ
-- завантаження підказок по роках і типах форм
-- пошук по роках
-- пошук по типах звітів
-- опцію `include_details`
-- скачування `zip` по поточних фільтрах
-- таблицю результатів
-- перегляд повного JSON для звіту
-
-## Приклад API-запиту
+Пошук звітів:
 
 ```json
 {
-  "edrpous": ["02545815", "14360570"],
-  "years": [2025, 2024],
-  "report_types": ["Форма № 7", "Форма № 2"],
+  "edrpous": ["43861328", "02125473"],
+  "report_types": ["Форма № 2"],
+  "date_from": "2021-01-01",
+  "date_to": "2025-12-31",
   "include_details": false
 }
 ```
 
-```powershell
-curl -X POST "http://127.0.0.1:8000/api/reports/search" `
-  -H "Content-Type: application/json" `
-  -d "{\"edrpous\":[\"02545815\"],\"years\":[2025],\"report_types\":[\"Форма № 7\"]}"
-```
-
-## Docker
-
-Збірка:
-
-```powershell
-docker build -t spendinggovua-api .
-```
-
-Запуск:
-
-```powershell
-docker run -p 8000:8000 spendinggovua-api
-```
-
-У контейнері сервіс стартує через `xvfb-run`, щоб Chromium працював у non-headless режимі.
-
-## ZIP-експорт
-
-`POST /api/reports/export/zip` повертає архів, де:
-
-- є `manifest.json` у корені
-- для кожного ЄДРПОУ створюється окрема папка
-- якщо звіти знайдені, в папці буде `index.json` і окремі `json`-файли звітів
-- якщо звітів немає, в папці буде `no_reports.json`
-
-Приклад для `Форма № 2`:
+Зведення доступних форм по групі:
 
 ```json
 {
-  "edrpous": ["26408431", "24983020"],
+  "edrpous": ["43861328", "02125473", "02071033"]
+}
+```
+
+HTML / PDF одного звіту:
+
+```text
+/api/reports/43861328/1701610529/html
+/api/reports/43861328/1701610529/pdf
+```
+
+## ZIP-експорт
+
+`POST /api/reports/export/zip` повертає архів такого типу:
+
+- `manifest.json` у корені
+- окрема папка на кожний ЄДРПОУ
+- `index.json` і файли звітів, якщо звіти знайдено
+- `no_reports.json`, якщо по ЄДРПОУ немає даних
+- `error.json`, якщо сам портал повернув помилку
+
+Приклад:
+
+```json
+{
+  "edrpous": ["43861328", "02125473"],
   "report_types": ["Форма № 2"],
   "include_details": true,
   "latest_only_per_edrpou": false
 }
 ```
 
+## HTML і PDF звітів
+
+Для конкретного `reportId` сервіс може побудувати читабельне подання звіту:
+
+- `HTML` з шапкою і таблицею
+- `PDF`, згенерований Chromium з цього HTML
+
+Це корисно, коли треба не сирий JSON, а документ у вигляді, близькому до сторінки порталу.
+
+## Масова підготовка форми 2
+
+Для масового архіву по `Форма № 2` використовуйте скрипт:
+
+```powershell
+.venv\Scripts\python scripts\export_form2_html_zip.py
+```
+
+Скрипт збирає:
+
+- всі доступні звіти форми 2 по заданому списку ЄДРПОУ
+- HTML-файли з табличним поданням
+- один загальний ZIP-архів
+
+Результати зберігаються в `output/`.
+
 ## Файли
 
-- `app/main.py` - HTTP API і роздача UI
-- `app/spending_client.py` - доступ до `spending.gov.ua`
-- `app/zip_export.py` - збірка zip-архівів
+- `app/main.py` - HTTP API
+- `app/spending_client.py` - робота з порталом через Playwright
+- `app/report_render.py` - HTML-рендер звіту
+- `app/zip_export.py` - збірка ZIP-архівів
 - `app/static/index.html` - UI
-- `app/static/app.css` - стилі
-- `app/static/app.js` - логіка інтерфейсу
-- `Dockerfile` - деплой через контейнер
+- `app/static/app.js` - логіка UI
+- `app/static/app.css` - стилі UI
+- `Dockerfile` - контейнерний запуск
