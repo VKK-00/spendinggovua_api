@@ -7,11 +7,11 @@ ENV PORT=8000
 WORKDIR /app
 
 COPY pyproject.toml README.md /app/
-COPY app /app/app
+COPY spendinggovua_api /app/spendinggovua_api
 
 RUN pip install --no-cache-dir .
 RUN python -m playwright install --with-deps chromium
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "xvfb-run -a uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "xvfb-run -a uvicorn spendinggovua_api.main:app --host 0.0.0.0 --port ${PORT}"]

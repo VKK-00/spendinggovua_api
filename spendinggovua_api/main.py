@@ -1,16 +1,14 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-import re
 from pathlib import Path as FilePath
+import re
 
 from fastapi import FastAPI, HTTPException, Path, Request
-from fastapi.responses import FileResponse
-from fastapi.responses import HTMLResponse
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from app.models import (
+from spendinggovua_api.models import (
     CatalogResponse,
     ErrorResponse,
     ExportReportsZipRequest,
@@ -19,10 +17,10 @@ from app.models import (
     SearchReportsRequest,
     SearchReportsResponse,
 )
-from app.settings import Settings
-from app.report_render import build_report_filename
-from app.spending_client import SpendingGovClient, SpendingGovError, normalize_edrpou
-from app.zip_export import build_reports_zip
+from spendinggovua_api.report_render import build_report_filename
+from spendinggovua_api.settings import Settings
+from spendinggovua_api.spending_client import SpendingGovClient, SpendingGovError, normalize_edrpou
+from spendinggovua_api.zip_export import build_reports_zip
 
 settings = Settings()
 client = SpendingGovClient(settings)
@@ -41,7 +39,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="spending.gov.ua reports API",
     version="0.1.0",
-    summary="API для витягування звітів spending.gov.ua по ЄДРПОУ, роках і типах звітів.",
+    summary="API for extracting spending.gov.ua reports by EDRPOU, period, and report form.",
     lifespan=lifespan,
 )
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -78,7 +76,7 @@ async def health(request: Request) -> HealthResponse:
 )
 async def catalog(
     request: Request,
-    edrpou: str = Path(..., description="ЄДРПОУ організації."),
+    edrpou: str = Path(..., description="Organization EDRPOU."),
 ) -> CatalogResponse:
     spending_client = get_client(request)
     try:
@@ -131,8 +129,8 @@ async def report_types_summary(
 )
 async def report_html(
     request: Request,
-    edrpou: str = Path(..., description="ЄДРПОУ організації."),
-    report_id: int = Path(..., description="Ідентифікатор звіту на spending.gov.ua."),
+    edrpou: str = Path(..., description="Organization EDRPOU."),
+    report_id: int = Path(..., description="Report identifier on spending.gov.ua."),
 ) -> HTMLResponse:
     spending_client = get_client(request)
     try:
@@ -149,8 +147,8 @@ async def report_html(
 )
 async def report_pdf(
     request: Request,
-    edrpou: str = Path(..., description="ЄДРПОУ організації."),
-    report_id: int = Path(..., description="Ідентифікатор звіту на spending.gov.ua."),
+    edrpou: str = Path(..., description="Organization EDRPOU."),
+    report_id: int = Path(..., description="Report identifier on spending.gov.ua."),
 ) -> Response:
     spending_client = get_client(request)
     normalized = normalize_edrpou(edrpou)

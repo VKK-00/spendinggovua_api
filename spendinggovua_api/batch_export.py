@@ -7,10 +7,10 @@ import json
 from pathlib import Path
 import zipfile
 
-from app.models import SearchReportsRequest
-from app.report_render import build_report_filename
-from app.settings import Settings
-from app.spending_client import SpendingGovClient
+from spendinggovua_api.models import SearchReportsRequest
+from spendinggovua_api.report_render import build_report_filename
+from spendinggovua_api.settings import Settings
+from spendinggovua_api.spending_client import SpendingGovClient
 
 
 DEFAULT_EDRPOUS = [

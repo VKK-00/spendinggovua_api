@@ -29,11 +29,11 @@ Homepage = "https://github.com/VKK-00/spendinggovua_api"
 Repository = "https://github.com/VKK-00/spendinggovua_api"
 
 [project.scripts]
-spendinggovua-api = "app.cli:run_api"
-spendinggovua-form2-export = "app.cli:export_form2_archive"
+spendinggovua-api = "spendinggovua_api.cli:run_api"
+spendinggovua-form2-export = "spendinggovua_api.cli:export_form2_archive"
 
 [tool.setuptools.packages.find]
-include = ["app*"]
+include = ["spendinggovua_api*"]
 
 [tool.setuptools.package-data]
-app = ["static/*"]
+spendinggovua_api = ["static/*"]

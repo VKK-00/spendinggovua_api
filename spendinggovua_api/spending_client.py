@@ -12,9 +12,9 @@ from typing import Any
 
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 
-from app.models import SearchReportsRequest
-from app.report_render import build_report_html
-from app.settings import Settings
+from spendinggovua_api.models import SearchReportsRequest
+from spendinggovua_api.report_render import build_report_html
+from spendinggovua_api.settings import Settings
 
 
 class SpendingGovError(RuntimeError):

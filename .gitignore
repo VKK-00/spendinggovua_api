@@ -7,3 +7,6 @@ __pycache__/
 uvicorn.err.log
 uvicorn.out.log
 output/
+build/
+dist/*.whl
+dist/*.tar.gz

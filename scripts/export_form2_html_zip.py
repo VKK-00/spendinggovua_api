@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
-from app.batch_export import export_form2_html_archive
+from spendinggovua_api.batch_export import export_form2_html_archive
 
 
 if __name__ == "__main__":
