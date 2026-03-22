@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="uk">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Spending Reports Explorer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/app.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="ambient ambient-left"></div>
+      <div class="ambient ambient-right"></div>
+
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">spending.gov.ua explorer</p>
+          <h1>Зручний пошук звітів по ЄДРПОУ, роках і типах форм</h1>
+          <p class="hero-text">
+            Інтерфейс працює поверх browser-backed API, тому підходить навіть там,
+            де звичайні HTTP-запити до portal-api блокуються.
+          </p>
+        </div>
+        <div class="hero-note">
+          <div class="note-label">Маршрут</div>
+          <div class="note-value">GitHub для коду, окремий сервер для запуску</div>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel control-panel">
+          <div class="panel-head">
+            <h2>Параметри пошуку</h2>
+            <p>Вкажіть один або кілька ЄДРПОУ. Перший код використовується для підказок по роках і типах звітів.</p>
+          </div>
+
+          <form id="search-form" class="search-form">
+            <label class="field">
+              <span class="field-label">ЄДРПОУ</span>
+              <textarea
+                id="edrpous"
+                name="edrpous"
+                rows="4"
+                placeholder="02545815&#10;43997335"
+              ></textarea>
+              <span class="field-hint">Один код на рядок або через кому.</span>
+            </label>
+
+            <div class="inline-actions">
+              <button type="button" id="load-catalog" class="secondary-button">
+                Завантажити підказки
+              </button>
+              <span id="catalog-status" class="status-line"></span>
+            </div>
+
+            <label class="field">
+              <span class="field-label">Роки</span>
+              <input
+                type="text"
+                id="years"
+                name="years"
+                placeholder="2025, 2024"
+              />
+              <span class="field-hint">Можна ввести вручну або вибрати з підказок нижче.</span>
+            </label>
+            <div id="year-chips" class="chips"></div>
+
+            <label class="field">
+              <span class="field-label">Типи звітів</span>
+              <input
+                type="text"
+                id="report-types"
+                name="report-types"
+                placeholder="Форма № 2, Форма № 7"
+              />
+              <span class="field-hint">Працює по short name або частині назви форми.</span>
+            </label>
+            <div id="type-chips" class="chips chips-long"></div>
+
+            <div class="grid-two">
+              <label class="field">
+                <span class="field-label">Максимум записів</span>
+                <input type="number" id="max-reports" min="1" placeholder="100" />
+              </label>
+              <label class="toggle-field">
+                <input type="checkbox" id="include-details" />
+                <span>Підтягувати повні деталі звітів</span>
+              </label>
+            </div>
+
+            <div class="action-row">
+              <button type="submit" class="primary-button">Знайти звіти</button>
+              <button type="button" id="reset-form" class="ghost-button">Скинути</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel result-panel">
+          <div class="panel-head">
+            <h2>Результат</h2>
+            <p id="result-meta">Ще немає запиту.</p>
+          </div>
+
+          <div id="flash" class="flash hidden"></div>
+
+          <div id="summary" class="summary-grid"></div>
+
+          <div id="table-wrapper" class="table-wrapper hidden">
+            <table class="results-table">
+              <thead>
+                <tr>
+                  <th>ЄДРПОУ</th>
+                  <th>Тип</th>
+                  <th>Рік</th>
+                  <th>Період</th>
+                  <th>Опубліковано</th>
+                  <th>Бюджет / фонд</th>
+                  <th>Дії</th>
+                </tr>
+              </thead>
+              <tbody id="results-body"></tbody>
+            </table>
+          </div>
+
+          <div id="empty-state" class="empty-state">
+            Введіть параметри й натисніть «Знайти звіти».
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="details-dialog" class="details-dialog">
+      <div class="dialog-head">
+        <div>
+          <p class="eyebrow">JSON details</p>
+          <h3 id="dialog-title">Деталі звіту</h3>
+        </div>
+        <button type="button" id="close-dialog" class="ghost-button">Закрити</button>
+      </div>
+      <pre id="details-json" class="details-json"></pre>
+    </dialog>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
