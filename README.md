@@ -56,6 +56,27 @@ uvicorn app.main:app --reload
 - Swagger: `http://127.0.0.1:8000/docs`
 - OpenAPI JSON: `http://127.0.0.1:8000/openapi.json`
 
+## Запуск як пакет
+
+Після встановлення в editable або звичайному режимі доступні CLI-команди:
+
+```powershell
+spendinggovua-api
+spendinggovua-form2-export
+```
+
+Перша запускає API, друга збирає загальний HTML ZIP по `Форма № 2` для заданого в коді списку ЄДРПОУ.
+
+## Збірка пакета
+
+Проєкт вже можна збирати як Python-пакет:
+
+```powershell
+uv build
+```
+
+Після цього артефакти з'являться в `dist/`.
+
 ## Приклади
 
 Пошук звітів:

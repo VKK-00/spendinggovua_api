@@ -8,11 +8,29 @@ version = "0.1.0"
 description = "FastAPI wrapper for extracting reports from spending.gov.ua"
 readme = "README.md"
 requires-python = ">=3.12"
+keywords = ["fastapi", "playwright", "spending.gov.ua", "edrpou", "budget-reports", "ukraine"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Framework :: FastAPI",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
   "fastapi>=0.116.1,<1.0.0",
   "playwright>=1.53.0,<2.0.0",
   "uvicorn[standard]>=0.35.0,<1.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/VKK-00/spendinggovua_api"
+Repository = "https://github.com/VKK-00/spendinggovua_api"
+
+[project.scripts]
+spendinggovua-api = "app.cli:run_api"
+spendinggovua-form2-export = "app.cli:export_form2_archive"
 
 [tool.setuptools.packages.find]
 include = ["app*"]
