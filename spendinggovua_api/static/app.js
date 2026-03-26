@@ -2,6 +2,7 @@ const state = {
   catalog: null,
   selectedYears: new Set(),
   selectedTypes: new Set(),
+  charts: [],
 };
 
 const form = document.getElementById("search-form");
@@ -21,6 +22,7 @@ const yearChips = document.getElementById("year-chips");
 const typeChips = document.getElementById("type-chips");
 const flash = document.getElementById("flash");
 const summary = document.getElementById("summary");
+const chartDashboard = document.getElementById("chart-dashboard");
 const resultMeta = document.getElementById("result-meta");
 const emptyState = document.getElementById("empty-state");
 const tableWrapper = document.getElementById("table-wrapper");
@@ -29,6 +31,10 @@ const dialog = document.getElementById("details-dialog");
 const dialogTitle = document.getElementById("dialog-title");
 const detailsJson = document.getElementById("details-json");
 const closeDialogButton = document.getElementById("close-dialog");
+const chartYearsCanvas = document.getElementById("chart-years");
+const chartTypesCanvas = document.getElementById("chart-types");
+const chartEdrpouCanvas = document.getElementById("chart-edrpou");
+const chartYearTypeCanvas = document.getElementById("chart-year-type");
 
 function parseList(value) {
   return value
@@ -61,6 +67,26 @@ function toggleSelection(setRef, value) {
   syncFieldsFromState();
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function joinKeyValue(objectValue = {}, limit = 4) {
+  const entries = Object.entries(objectValue);
+  if (!entries.length) {
+    return "—";
+  }
+  return entries
+    .slice(0, limit)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(" · ");
+}
+
 function renderCatalog(catalog) {
   state.catalog = catalog;
   yearChips.innerHTML = "";
@@ -90,41 +116,38 @@ function renderCatalog(catalog) {
     typeChips.appendChild(chip);
   }
 
-  catalogStatus.textContent = `Підказки завантажено для ЄДРПОУ ${catalog.edrpou}`;
-}
-
-function joinKeyValue(objectValue = {}, limit = 4) {
-  const entries = Object.entries(objectValue);
-  if (!entries.length) {
-    return "—";
-  }
-  return entries
-    .slice(0, limit)
-    .map(([key, value]) => `${key}: ${value}`)
-    .join(" · ");
+  catalogStatus.textContent = `Loaded catalog hints for EDRPOU ${catalog.edrpou}.`;
 }
 
 function buildSummaryCards(payload) {
+  const summaryPayload = payload.summary || {};
+  const totalReports = summaryPayload.total_reports ?? 0;
+  const returnedReports = summaryPayload.returned_reports ?? (payload.items || []).length;
   const cards = [
     {
-      label: "Знайдено звітів",
-      value: payload.summary.total_reports ?? 0,
-      subvalue: `ЄДРПОУ: ${(payload.query.edrpous || []).join(", ") || "не вказано"}`,
+      label: "Matched Reports",
+      value: totalReports,
+      subvalue: `EDRPOU: ${(payload.query.edrpous || []).join(", ") || "not provided"}`,
     },
     {
-      label: "Роки",
-      value: Object.keys(payload.summary.by_year || {}).length,
-      subvalue: joinKeyValue(payload.summary.by_year),
+      label: "Returned Rows",
+      value: returnedReports,
+      subvalue: totalReports > returnedReports ? `Visible table is limited from ${totalReports}.` : "Full result set is visible.",
     },
     {
-      label: "Типи",
-      value: Object.keys(payload.summary.by_type || {}).length,
-      subvalue: joinKeyValue(payload.summary.by_type, 3),
+      label: "Years",
+      value: Object.keys(summaryPayload.by_year || {}).length,
+      subvalue: joinKeyValue(summaryPayload.by_year),
     },
     {
-      label: "ЄДРПОУ з даними",
-      value: Object.keys(payload.summary.by_edrpou || {}).length,
-      subvalue: joinKeyValue(payload.summary.by_edrpou),
+      label: "Types",
+      value: Object.keys(summaryPayload.by_type || {}).length,
+      subvalue: joinKeyValue(summaryPayload.by_type, 3),
+    },
+    {
+      label: "EDRPOU With Data",
+      value: Object.keys(summaryPayload.by_edrpou || {}).length,
+      subvalue: joinKeyValue(summaryPayload.by_edrpou),
     },
   ];
 
@@ -141,17 +164,217 @@ function buildSummaryCards(payload) {
     .join("");
 }
 
+function destroyCharts() {
+  for (const chart of state.charts) {
+    chart.destroy();
+  }
+  state.charts = [];
+}
+
+function hideCharts() {
+  destroyCharts();
+  chartDashboard.classList.add("hidden");
+}
+
+function chartPalette() {
+  return [
+    "#0f766e",
+    "#155e75",
+    "#db8a35",
+    "#7c5c3b",
+    "#8a4f7d",
+    "#5c7c3b",
+    "#2f5d8a",
+    "#9a3412",
+    "#4d7c0f",
+    "#7c3aed",
+  ];
+}
+
+function translucentPalette(alpha = 0.2) {
+  return [
+    `rgba(15, 118, 110, ${alpha})`,
+    `rgba(21, 94, 117, ${alpha})`,
+    `rgba(219, 138, 53, ${alpha})`,
+    `rgba(124, 92, 59, ${alpha})`,
+    `rgba(138, 79, 125, ${alpha})`,
+    `rgba(92, 124, 59, ${alpha})`,
+    `rgba(47, 93, 138, ${alpha})`,
+    `rgba(154, 52, 18, ${alpha})`,
+    `rgba(77, 124, 15, ${alpha})`,
+    `rgba(124, 58, 237, ${alpha})`,
+  ];
+}
+
+function registerChart(canvas, config) {
+  const chart = new Chart(canvas.getContext("2d"), config);
+  state.charts.push(chart);
+}
+
+function renderCharts(payload) {
+  hideCharts();
+
+  if (typeof Chart !== "function") {
+    setFlash("Chart.js failed to load, analytics charts are unavailable.", "error");
+    return;
+  }
+
+  const series = payload.summary?.series || {};
+  const reportsByYear = series.reports_by_year || [];
+  const reportsByType = series.reports_by_type || [];
+  const reportsByEdrpouTop = series.reports_by_edrpou_top || [];
+  const reportsByYearAndType = series.reports_by_year_and_type || {};
+
+  if (!reportsByYear.length && !reportsByType.length && !reportsByEdrpouTop.length) {
+    return;
+  }
+
+  Chart.defaults.font.family = 'Manrope, "Segoe UI", sans-serif';
+  Chart.defaults.color = "#5d6a68";
+  Chart.defaults.borderColor = "rgba(31, 42, 43, 0.08)";
+
+  const colors = chartPalette();
+  const softColors = translucentPalette();
+
+  registerChart(chartYearsCanvas, {
+    type: "bar",
+    data: {
+      labels: reportsByYear.map((item) => item.label),
+      datasets: [
+        {
+          label: "Reports",
+          data: reportsByYear.map((item) => item.count),
+          borderColor: colors[0],
+          backgroundColor: softColors[0],
+          borderWidth: 2,
+          borderRadius: 10,
+        },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { precision: 0 },
+        },
+      },
+    },
+  });
+
+  registerChart(chartTypesCanvas, {
+    type: "doughnut",
+    data: {
+      labels: reportsByType.map((item) => item.label),
+      datasets: [
+        {
+          data: reportsByType.map((item) => item.count),
+          borderWidth: 1,
+          borderColor: "rgba(255, 252, 247, 0.96)",
+          backgroundColor: colors.slice(0, reportsByType.length),
+        },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            boxWidth: 10,
+            usePointStyle: true,
+          },
+        },
+      },
+    },
+  });
+
+  registerChart(chartEdrpouCanvas, {
+    type: "bar",
+    data: {
+      labels: reportsByEdrpouTop.map((item) => item.label),
+      datasets: [
+        {
+          label: "Reports",
+          data: reportsByEdrpouTop.map((item) => item.count),
+          borderColor: colors[1],
+          backgroundColor: softColors[1],
+          borderWidth: 2,
+          borderRadius: 10,
+        },
+      ],
+    },
+    options: {
+      indexAxis: "y",
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+      },
+      scales: {
+        x: {
+          beginAtZero: true,
+          ticks: { precision: 0 },
+        },
+      },
+    },
+  });
+
+  registerChart(chartYearTypeCanvas, {
+    type: "bar",
+    data: {
+      labels: reportsByYearAndType.labels || [],
+      datasets: (reportsByYearAndType.datasets || []).map((dataset, index) => ({
+        label: dataset.label,
+        data: dataset.data,
+        borderColor: colors[index % colors.length],
+        backgroundColor: softColors[index % softColors.length],
+        borderWidth: 1.5,
+        borderRadius: 6,
+      })),
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            boxWidth: 10,
+            usePointStyle: true,
+          },
+        },
+      },
+      scales: {
+        x: { stacked: true },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          ticks: { precision: 0 },
+        },
+      },
+    },
+  });
+
+  chartDashboard.classList.remove("hidden");
+}
+
 function renderResults(payload) {
   buildSummaryCards(payload);
+  renderCharts(payload);
   resultsBody.innerHTML = "";
 
   const items = payload.items || [];
-  resultMeta.textContent = `Отримано ${items.length} записів`;
+  const totalReports = payload.summary?.total_reports ?? items.length;
+  const returnedReports = payload.summary?.returned_reports ?? items.length;
+  resultMeta.textContent = `Showing ${returnedReports} of ${totalReports} matched reports.`;
 
   if (!items.length) {
-    emptyState.textContent = "За цими параметрами звітів не знайдено.";
+    emptyState.textContent = "No reports matched the current filters.";
     emptyState.classList.remove("hidden");
     tableWrapper.classList.add("hidden");
+    hideCharts();
     return;
   }
 
@@ -175,7 +398,7 @@ function renderResults(payload) {
       <td>${escapeHtml([item.budget, item.fund].filter(Boolean).join(" / ") || "—")}</td>
       <td>
         <div class="row-actions">
-          <a class="row-link" href="https://spending.gov.ua/new/en/disposers/${encodeURIComponent(item.edrpou)}/reports" target="_blank" rel="noreferrer">Портал</a>
+          <a class="row-link" href="https://spending.gov.ua/new/en/disposers/${encodeURIComponent(item.edrpou)}/reports" target="_blank" rel="noreferrer">Portal</a>
           <a class="row-link" href="/api/reports/${encodeURIComponent(item.edrpou)}/${encodeURIComponent(item.reportId)}/html" target="_blank" rel="noreferrer">HTML</a>
           <a class="row-link" href="/api/reports/${encodeURIComponent(item.edrpou)}/${encodeURIComponent(item.reportId)}/pdf" target="_blank" rel="noreferrer">PDF</a>
           ${item.details ? '<button type="button" class="ghost-button details-button">JSON</button>' : ""}
@@ -200,21 +423,21 @@ async function loadCatalog() {
   clearFlash();
   const edrpous = parseList(edrpousField.value);
   if (!edrpous.length) {
-    setFlash("Спочатку введіть хоча б один ЄДРПОУ.", "error");
+    setFlash("Enter at least one EDRPOU first.", "error");
     return;
   }
 
-  catalogStatus.textContent = "Завантаження підказок...";
+  catalogStatus.textContent = "Loading catalog hints...";
   loadCatalogButton.disabled = true;
 
   try {
     const response = await fetch(`/api/catalog/${encodeURIComponent(edrpous[0])}`);
     const payload = await response.json();
     if (!response.ok) {
-      throw new Error(payload.detail || "Не вдалося завантажити каталог.");
+      throw new Error(payload.detail || "Failed to load catalog.");
     }
     renderCatalog(payload);
-    setFlash("Підказки по роках і типах форм оновлено.", "info");
+    setFlash("Catalog hints updated.", "info");
   } catch (error) {
     setFlash(error.message, "error");
     catalogStatus.textContent = "";
@@ -223,19 +446,12 @@ async function loadCatalog() {
   }
 }
 
-async function searchReports(event) {
-  event.preventDefault();
-  clearFlash();
-
-  const edrpous = parseList(edrpousField.value);
-  if (!edrpous.length) {
-    setFlash("Вкажіть хоча б один ЄДРПОУ.", "error");
-    return;
-  }
-
+function buildSearchPayload() {
   const payload = {
-    edrpous,
-    years: parseList(yearsField.value).map((value) => Number(value)).filter((value) => Number.isFinite(value)),
+    edrpous: parseList(edrpousField.value),
+    years: parseList(yearsField.value)
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value)),
     report_types: parseList(reportTypesField.value),
     include_details: includeDetailsField.checked,
   };
@@ -252,10 +468,23 @@ async function searchReports(event) {
     payload.max_reports = maxReports;
   }
 
+  return payload;
+}
+
+async function searchReports(event) {
+  event.preventDefault();
+  clearFlash();
+
+  const payload = buildSearchPayload();
+  if (!payload.edrpous.length) {
+    setFlash("Specify at least one EDRPOU.", "error");
+    return;
+  }
+
   const submitButton = form.querySelector('button[type="submit"]');
   submitButton.disabled = true;
-  submitButton.textContent = "Пошук...";
-  resultMeta.textContent = "Запит виконується...";
+  submitButton.textContent = "Searching...";
+  resultMeta.textContent = "Running query...";
 
   try {
     const response = await fetch("/api/reports/search", {
@@ -265,59 +494,45 @@ async function searchReports(event) {
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.detail || "Пошук завершився з помилкою.");
+      throw new Error(data.detail || "Search failed.");
     }
     renderResults(data);
-    setFlash("Пошук завершено.", "info");
+    if (!flash.classList.contains("error")) {
+      setFlash("Search completed.", "info");
+    }
   } catch (error) {
     summary.innerHTML = "";
     resultsBody.innerHTML = "";
     tableWrapper.classList.add("hidden");
     emptyState.classList.remove("hidden");
-    emptyState.textContent = "Не вдалося отримати результат.";
+    emptyState.textContent = "Failed to load results.";
+    hideCharts();
     setFlash(error.message, "error");
   } finally {
     submitButton.disabled = false;
-    submitButton.textContent = "Знайти звіти";
+    submitButton.textContent = "Find Reports";
   }
 }
 
 async function downloadZip() {
   clearFlash();
 
-  const edrpous = parseList(edrpousField.value);
-  if (!edrpous.length) {
-    setFlash("Вкажіть хоча б один ЄДРПОУ для експорту.", "error");
+  const payload = buildSearchPayload();
+  if (!payload.edrpous.length) {
+    setFlash("Specify at least one EDRPOU for export.", "error");
     return;
   }
 
-  const payload = {
-    edrpous,
-    years: parseList(yearsField.value).map((value) => Number(value)).filter((value) => Number.isFinite(value)),
-    report_types: parseList(reportTypesField.value),
-    include_details: true,
-    latest_only_per_edrpou: latestOnlyField.checked,
-  };
-
-  if (dateFromField.value) {
-    payload.date_from = dateFromField.value;
-  }
-  if (dateToField.value) {
-    payload.date_to = dateToField.value;
-  }
-
-  const maxReports = Number(maxReportsField.value);
-  if (Number.isFinite(maxReports) && maxReports > 0) {
-    payload.max_reports = maxReports;
-  }
+  payload.include_details = true;
+  payload.latest_only_per_edrpou = latestOnlyField.checked;
 
   if (!payload.report_types.length) {
-    payload.report_types = ["Форма № 2"];
+    payload.report_types = ["2"];
     reportTypesField.value = payload.report_types.join(", ");
   }
 
   downloadZipButton.disabled = true;
-  downloadZipButton.textContent = "Готуємо ZIP...";
+  downloadZipButton.textContent = "Preparing ZIP...";
 
   try {
     const response = await fetch("/api/reports/export/zip", {
@@ -327,12 +542,12 @@ async function downloadZip() {
     });
 
     if (!response.ok) {
-      let message = "Не вдалося згенерувати ZIP.";
+      let message = "Failed to generate ZIP.";
       try {
         const errorPayload = await response.json();
         message = errorPayload.detail || message;
       } catch (_error) {
-        // ignore parse error and keep fallback message
+        // Ignore parse failures and keep the fallback message.
       }
       throw new Error(message);
     }
@@ -351,12 +566,12 @@ async function downloadZip() {
     anchor.remove();
     URL.revokeObjectURL(url);
 
-    setFlash("ZIP-архів згенеровано і завантажено.", "info");
+    setFlash("ZIP archive generated and downloaded.", "info");
   } catch (error) {
     setFlash(error.message, "error");
   } finally {
     downloadZipButton.disabled = false;
-    downloadZipButton.textContent = "Скачати ZIP";
+    downloadZipButton.textContent = "Download ZIP";
   }
 }
 
@@ -371,20 +586,12 @@ function resetForm() {
   summary.innerHTML = "";
   resultsBody.innerHTML = "";
   tableWrapper.classList.add("hidden");
+  hideCharts();
   emptyState.classList.remove("hidden");
-  emptyState.textContent = "Введіть параметри й натисніть «Знайти звіти».";
-  resultMeta.textContent = "Ще немає запиту.";
+  emptyState.textContent = "Enter filters and run a search.";
+  resultMeta.textContent = "No query has been executed yet.";
   catalogStatus.textContent = "";
   clearFlash();
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
 }
 
 closeDialogButton.addEventListener("click", () => dialog.close());

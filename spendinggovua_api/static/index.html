@@ -129,6 +129,60 @@
 
           <div id="summary" class="summary-grid"></div>
 
+          <section id="chart-dashboard" class="chart-dashboard hidden" aria-label="Analytics dashboard">
+            <article class="chart-card">
+              <div class="chart-head">
+                <div>
+                  <p class="eyebrow">timeline</p>
+                  <h3>Reports By Year</h3>
+                </div>
+                <p class="chart-note">Full filtered set</p>
+              </div>
+              <div class="chart-canvas-wrap">
+                <canvas id="chart-years"></canvas>
+              </div>
+            </article>
+
+            <article class="chart-card">
+              <div class="chart-head">
+                <div>
+                  <p class="eyebrow">mix</p>
+                  <h3>Reports By Type</h3>
+                </div>
+                <p class="chart-note">Count share</p>
+              </div>
+              <div class="chart-canvas-wrap">
+                <canvas id="chart-types"></canvas>
+              </div>
+            </article>
+
+            <article class="chart-card">
+              <div class="chart-head">
+                <div>
+                  <p class="eyebrow">coverage</p>
+                  <h3>Top EDRPOU</h3>
+                </div>
+                <p class="chart-note">Top 10 by reports</p>
+              </div>
+              <div class="chart-canvas-wrap">
+                <canvas id="chart-edrpou"></canvas>
+              </div>
+            </article>
+
+            <article class="chart-card">
+              <div class="chart-head">
+                <div>
+                  <p class="eyebrow">breakdown</p>
+                  <h3>Year / Type Breakdown</h3>
+                </div>
+                <p class="chart-note">Stacked yearly counts</p>
+              </div>
+              <div class="chart-canvas-wrap">
+                <canvas id="chart-year-type"></canvas>
+              </div>
+            </article>
+          </section>
+
           <div id="table-wrapper" class="table-wrapper hidden">
             <table class="results-table">
               <thead>
@@ -164,6 +218,7 @@
       <pre id="details-json" class="details-json"></pre>
     </dialog>
 
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script src="/static/app.js"></script>
   </body>
 </html>

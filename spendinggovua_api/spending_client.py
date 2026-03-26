@@ -12,6 +12,7 @@ from typing import Any
 
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 
+from spendinggovua_api.analytics import build_reports_summary
 from spendinggovua_api.models import SearchReportsRequest
 from spendinggovua_api.report_render import build_report_html
 from spendinggovua_api.settings import Settings
@@ -339,11 +340,15 @@ class SpendingGovClient:
             reverse=True,
         )
 
-        if request.max_reports is not None:
-            all_items = all_items[: request.max_reports]
+        full_filtered_items = list(all_items)
+        visible_items = (
+            full_filtered_items[: request.max_reports]
+            if request.max_reports is not None
+            else list(full_filtered_items)
+        )
 
-        if request.include_details and all_items:
-            await self._attach_details(all_items)
+        if request.include_details and visible_items:
+            await self._attach_details(visible_items)
 
         return {
             "query": {
@@ -357,9 +362,12 @@ class SpendingGovClient:
                 "include_details": request.include_details,
                 "max_reports": request.max_reports,
             },
-            "summary": self._build_summary(all_items),
-            "items": all_items,
-        }, all_items, errors
+            "summary": self._build_summary(
+                full_filtered_items,
+                returned_reports=len(visible_items),
+            ),
+            "items": visible_items,
+        }, visible_items, errors
 
     async def _ensure_browser(self) -> BrowserContext:
         async with self._browser_lock:
@@ -741,7 +749,7 @@ class SpendingGovClient:
             if key in details_map:
                 item["details"] = details_map[key]
 
-    def _build_summary(self, items: list[dict[str, Any]]) -> dict[str, Any]:
+    def _build_summary_legacy(self, items: list[dict[str, Any]]) -> dict[str, Any]:
         by_year = Counter()
         by_type = Counter()
         by_edrpou = Counter()
@@ -768,3 +776,11 @@ class SpendingGovClient:
                 for edrpou, year_counter in sorted(by_edrpou_and_year.items())
             },
         }
+
+    def _build_summary(
+        self,
+        items: list[dict[str, Any]],
+        *,
+        returned_reports: int | None = None,
+    ) -> dict[str, Any]:
+        return build_reports_summary(items, returned_reports=returned_reports)
