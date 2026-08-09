@@ -1,0 +1,45 @@
+name: temporary-psh09d1-dsa-details
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/psh09d1_dsa_details.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  dsa-details:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      SNAPSHOT_URL: https://data.gov.ua/dataset/0ad60ea9-b029-456d-abc0-8c77a99b205c/resource/b1d5b6b3-d1fa-4c20-887b-6fa357ca17ed/revision/514021/download
+    steps:
+      - uses: actions/checkout@v4
+      - run: python -m pip install --disable-pip-version-check requests beautifulsoup4
+      - name: Download frozen DSA snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 8 --retry-delay 10 --retry-all-errors \
+            --connect-timeout 30 --max-time 10800 "$SNAPSHOT_URL" -o snapshot.zip
+          sha256sum snapshot.zip
+          ls -lh snapshot.zip
+      - name: Extract all fixed-sample rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          python .github/scripts/psh09d1_verify.py \
+            --snapshot snapshot.zip \
+            --selected .github/psh09d1/selected_cases.txt \
+            --out dsa_out
+          sha256sum dsa_out/* | tee dsa_out/output_sha256.txt
+          wc -l dsa_out/*.csv
+      - uses: actions/upload-artifact@v4
+        with:
+          name: psh09d1-dsa-details
+          path: dsa_out/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 9
