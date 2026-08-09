@@ -1,0 +1,68 @@
+name: temporary-psh09d1-edrsr-fast
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/psh09d1_edrsr_fast.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  extract-edrsr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      EDRSR_2024_URL: https://data.gov.ua/dataset/1a6b5c08-0879-4387-8878-ac0027494274/resource/d3427d17-3fe4-4675-9a09-5274cd3476dc/download/edrsr_data_2024.zip
+      EDRSR_2025_URL: https://data.gov.ua/dataset/2a95ae17-ed46-42ae-ad66-dd9b7a727bb7/resource/9f19ad2b-000f-4176-b283-95e399ad8e5e/download/edrsr_data_2025.zip
+      EDRSR_2026_URL: https://data.gov.ua/dataset/16ab7f06-7414-405f-8354-0a492475272d/resource/b1a4ac1c-b17a-4988-8e6d-dedae8b2dd63/download/edrsr_data_2026.zip
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download official annual archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          for y in 2024 2025 2026; do
+            var="EDRSR_${y}_URL"
+            url="${!var}"
+            curl --fail --location --retry 8 --retry-delay 10 --retry-all-errors \
+              --connect-timeout 30 --max-time 10800 "$url" -o "edrsr_${y}.zip"
+            sha256sum "edrsr_${y}.zip"
+            stat -c '%n %s' "edrsr_${y}.zip"
+          done
+      - name: Extract only rows for frozen case list and dictionaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p edrsr_fast
+          cp .github/psh09d1/selected_cases.txt edrsr_fast/
+          : > edrsr_fast/archive_meta.txt
+          for y in 2024 2025 2026; do
+            zip="edrsr_${y}.zip"
+            member="$(unzip -Z1 "$zip" | grep -Ei '(^|/)documents\.csv$' | head -n1)"
+            test -n "$member"
+            echo "$y documents_member=$member" | tee -a edrsr_fast/archive_meta.txt
+            # Preserve header and exact matching rows. LC_ALL=C keeps byte matching deterministic.
+            unzip -p "$zip" "$member" | head -n1 > "edrsr_fast/documents_${y}_selected.csv"
+            set +e
+            LC_ALL=C unzip -p "$zip" "$member" | LC_ALL=C grep -F -f .github/psh09d1/selected_cases.txt >> "edrsr_fast/documents_${y}_selected.csv"
+            status=${PIPESTATUS[1]}
+            set -e
+            if [ "$status" -gt 1 ]; then exit "$status"; fi
+            for f in courts.csv instances.csv regions.csv judgment_forms.csv justice_kinds.csv cause_categories.csv; do
+              m="$(unzip -Z1 "$zip" | grep -Ei "(^|/)${f}$" | head -n1 || true)"
+              if [ -n "$m" ]; then unzip -p "$zip" "$m" > "edrsr_fast/${y}_${f}"; fi
+            done
+            printf '%s\t%s\t%s\n' "$y" "$(stat -c %s "$zip")" "$(sha256sum "$zip" | cut -d' ' -f1)" >> edrsr_fast/archive_meta.txt
+            wc -l "edrsr_fast/documents_${y}_selected.csv"
+          done
+          sha256sum edrsr_fast/* > edrsr_fast/output_sha256.txt
+          du -sh edrsr_fast
+      - uses: actions/upload-artifact@v4
+        with:
+          name: psh09d1-edrsr-fast
+          path: edrsr_fast/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 9
