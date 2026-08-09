@@ -1,0 +1,49 @@
+name: temporary-psh09d1-extract
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/psh09d1.yml'
+      - '.github/scripts/psh09d1_extract.py'
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      SOURCE_URL: https://data.gov.ua/dataset/0ad60ea9-b029-456d-abc0-8c77a99b205c/resource/b1d5b6b3-d1fa-4c20-887b-6fa357ca17ed/revision/514021/download
+    steps:
+      - name: Check out extraction script
+        uses: actions/checkout@v4
+
+      - name: Download frozen official DSA snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 8 --retry-delay 10 --retry-all-errors \
+            --connect-timeout 30 --max-time 7200 \
+            "$SOURCE_URL" -o snapshot.zip
+          ls -lh snapshot.zip
+          file snapshot.zip
+
+      - name: Extract candidates and fixed-seed samples
+        shell: bash
+        run: |
+          set -euo pipefail
+          python .github/scripts/psh09d1_extract.py snapshot.zip out
+          sha256sum out/* | tee out/output_sha256.txt
+          wc -l out/candidates.csv out/selected_for_review.csv
+          cat out/snapshot_meta.json
+
+      - name: Upload compact extraction result
+        uses: actions/upload-artifact@v4
+        with:
+          name: psh09d1-extraction
+          path: out/
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 9
