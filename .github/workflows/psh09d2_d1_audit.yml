@@ -1,0 +1,40 @@
+name: PSH-09-D2 D1 raw DSA audit
+
+on:
+  push:
+    branches:
+      - chatgpt/psh09d2-20260810
+    paths:
+      - 'psh09d2/audit_d1_dsa.py.gz.b64'
+      - '.github/workflows/psh09d2_d1_audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install --disable-pip-version-check requests==2.32.4
+      - name: Reconstruct bounded audit script
+        run: |
+          python - <<'PY'
+          import base64, gzip
+          from pathlib import Path
+          src = Path('psh09d2/audit_d1_dsa.py.gz.b64')
+          Path('psh09d2/audit_d1_dsa.py').write_bytes(gzip.decompress(base64.b64decode(src.read_text(encoding='utf-8'))))
+          PY
+      - name: Audit all 65 D1 numbers against raw official DSA snapshot
+        run: python psh09d2/audit_d1_dsa.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: psh09d2-d1-dsa-audit
+          path: psh09d2/d1_audit_output/
+          if-no-files-found: error
+          retention-days: 1
