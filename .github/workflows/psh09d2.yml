@@ -1,0 +1,55 @@
+name: PSH-09-D2 machine denominator
+
+on:
+  push:
+    branches:
+      - chatgpt/psh09d2-20260810
+    paths:
+      - '.github/workflows/psh09d2.yml'
+      - 'psh09d2/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHONUNBUFFERED: '1'
+
+jobs:
+  build-denominator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Reconstruct job payload
+        run: python psh09d2/unpack_payload.py
+      - name: Install dependency
+        run: python -m pip install --disable-pip-version-check requests==2.32.4 pytest==8.4.1
+      - name: Run rule tests
+        working-directory: psh09d2
+        run: python -m pytest -q test_rules.py
+      - name: Acquire and filter official open data
+        run: |
+          rm -rf psh09d2/output psh09d2/work
+          python psh09d2/acquire_filter.py \
+            --d1 psh09d2/input/d1_candidates.csv \
+            --output psh09d2/output \
+            --work psh09d2/work
+      - name: Show manifest and disk use
+        if: always()
+        run: |
+          df -h
+          find psh09d2/output -maxdepth 1 -type f -printf '%f %s bytes\n' 2>/dev/null | sort || true
+          cat psh09d2/output/artifact_manifest.csv 2>/dev/null || true
+      - name: Upload result artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: psh09d2-machine-results
+          path: psh09d2/output
+          if-no-files-found: warn
+          retention-days: 1
+          compression-level: 6
